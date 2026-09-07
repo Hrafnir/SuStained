@@ -390,7 +390,9 @@ export const BUILDINGS = [
     requires: 'drainage',
   },
 ];
+export type WorkPlacement = { tile?: number; job?: 'science' | 'money' };
 export type Action =
+  | { type: 'work_plan'; placements: WorkPlacement[] }
   | { type: 'work'; tile?: number; job?: 'science' | 'money' }
   | { type: 'research'; id: string }
   | { type: 'build'; id: string; tile?: number }
@@ -544,6 +546,15 @@ export function applyAction(original: Game, a: Action): Game {
   const g: Game = structuredClone(original);
   if (g.phase === 'finished') throw Error('Spillet er avsluttet.');
   const p = g.players[g.active];
+  if (a.type === 'work_plan') {
+    if (
+      !Array.isArray(a.placements) ||
+      a.placements.length !== p.left ||
+      !p.left
+    )
+      throw Error('Plasser alle ledige arbeidere før du låser.');
+    return previewWork(original, a.placements);
+  }
   if (a.type === 'work') {
     if (g.phase !== 'work' || p.left < 1)
       throw Error('Du kan ikke plassere flere arbeidere nå.');
@@ -829,4 +840,22 @@ export function parseSave(text: string): Game {
     delete g.winner;
   }
   return g;
+}
+
+/** Recompute provisional production from the unchanged committed board. */
+export function previewWork(original: Game, placements: WorkPlacement[]): Game {
+  if (original.phase !== 'work') throw Error('Arbeiderfasen er avsluttet.');
+  if (placements.length > original.players[original.active].left)
+    throw Error('Ingen ledige arbeidere.');
+  let result = structuredClone(original);
+  for (const placement of placements) {
+    if (
+      !placement ||
+      (placement.tile !== undefined && placement.job !== undefined)
+    )
+      throw Error('Velg ett arbeidssted.');
+    result.active = original.active;
+    result = applyAction(result, { ...placement, type: 'work' });
+  }
+  return result;
 }

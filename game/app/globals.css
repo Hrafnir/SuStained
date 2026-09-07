@@ -1365,3 +1365,93 @@ p {
     margin: 0;
   }
 }
+
+/* Provisional workers stay tangible while the committed board is unchanged. */
+.draft-worker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 42px;
+  min-height: 42px;
+  padding: 6px;
+  border: 2px dashed #e5c782;
+  border-radius: 12px;
+  background: #21493f;
+  color: #ffedb7;
+  box-shadow: 0 4px 8px #0007;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  position: relative;
+  z-index: 2;
+}
+.draft-worker:active {
+  cursor: grabbing;
+}
+.draft-worker.chosen,
+.draft-worker:focus-visible {
+  outline: 3px solid #fff1c5;
+  outline-offset: 3px;
+}
+.tile-workers {
+  display: flex;
+  gap: 5px;
+}
+.draft-worker small {
+  font-size: 10px;
+  color: inherit;
+}
+.gain-preview {
+  color: #dfc482;
+  font-size: 14px;
+  font-style: normal;
+  white-space: nowrap;
+}
+.placement-plan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #1b3931;
+  border: 1px solid #bba36c66;
+  border-radius: 12px;
+  margin-top: 12px;
+}
+.placement-plan > div {
+  flex: 1;
+  min-width: 180px;
+}
+.placement-plan p {
+  font-size: 12px;
+  color: #b9c5bc;
+  margin: 5px 0 0;
+}
+.placement-plan > button:not(.primary),
+.reserve-return {
+  border: 1px solid #bba36c66;
+  border-radius: 8px;
+  padding: 9px;
+  font-size: 12px;
+}
+.placement-plan .primary {
+  width: auto;
+  margin: 0;
+}
+.drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -65%);
+  display: flex;
+  gap: 5px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #e4c583;
+  color: #17382e;
+  box-shadow: 0 12px 30px #0008;
+}
+.general-jobs .draft-worker {
+  margin: 4px;
+}

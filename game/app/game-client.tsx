@@ -40,6 +40,8 @@ import {
   ROUND_YEARS,
   createGame,
   applyAction,
+  previewWork,
+  type WorkPlacement,
   parseSave,
   score,
   upkeep,
@@ -83,6 +85,20 @@ function CostLabel({ cost }: { cost: Cost }) {
 }
 export default function Home() {
   const [game, setGame] = useState<Game>(() => createGame(NAMES.slice(0, 3)));
+  const [draft, setDraft] = useState<(WorkPlacement | null)[]>([]);
+  const [chosen, setChosen] = useState<number | null>(null);
+  const [drag, setDrag] = useState<{
+    index: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const gesture = useRef<{
+    index: number;
+    x: number;
+    y: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressClick = useRef(false);
   const [ready, setReady] = useState(false);
   const [started, setStarted] = useState(false);
   const [view, setView] = useState(0);
@@ -144,6 +160,8 @@ export default function Home() {
       setUndo((u) => [...u.slice(-29), previous]);
       ref.current = next;
       setGame(next);
+      setDraft([]);
+      setChosen(null);
       setView(next.active);
       setSelected(undefined);
       setMessage(next.log.slice(previous.log.length).join(' '));
@@ -197,7 +215,26 @@ export default function Home() {
             type: 'object',
             properties: {
               type: {
-                enum: ['work', 'research', 'build', 'trade', 'grow', 'pass'],
+                enum: [
+                  'work',
+                  'work_plan',
+                  'research',
+                  'build',
+                  'trade',
+                  'grow',
+                  'pass',
+                ],
+              },
+              placements: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    tile: { type: 'integer' },
+                    job: { enum: ['science', 'money'] },
+                  },
+                  additionalProperties: false,
+                },
               },
               id: { type: 'string' },
               tile: { type: 'integer' },
@@ -246,6 +283,8 @@ export default function Home() {
     const next = createGame(names.slice(0, count));
     ref.current = next;
     setGame(next);
+    setDraft([]);
+    setChosen(null);
     setView(0);
     setStarted(true);
     setUndo([]);
@@ -274,24 +313,124 @@ export default function Home() {
       return;
     }
     if (game.phase === 'work') {
-      play({ type: 'work', tile: i });
+      placeWorker({ tile: i });
     } else {
       setSelected(i);
       setModal('build');
     }
   }
+  const planning = isTurn && game.phase === 'work';
+  const assignments = Array.from(
+    { length: current.left },
+    (_, i) => draft[i] ?? null,
+  );
+  const placed = assignments.filter((a): a is WorkPlacement => a !== null);
+  const projected = planning ? previewWork(game, placed).players[view] : p;
+  function placeWorker(target: WorkPlacement | null, index?: number) {
+    if (!planning) return;
+    const worker = index ?? chosen ?? assignments.findIndex((a) => a === null);
+    if (worker < 0 || worker >= assignments.length) {
+      setMessage('Velg en plassert arbeider for å flytte den.');
+      return;
+    }
+    const next = [...assignments];
+    next[worker] = target;
+    try {
+      previewWork(
+        game,
+        next.filter((a): a is WorkPlacement => a !== null),
+      );
+      setDraft(next);
+      setChosen(null);
+      setMessage(
+        target
+          ? 'Plasseringen er foreløpig. Flytt fritt, og lås når du er klar.'
+          : 'Arbeideren er tilbake i reserven.',
+      );
+    } catch (e) {
+      setMessage((e as Error).message);
+    }
+  }
+  /* oxlint-disable jsx-a11y/prefer-tag-over-role -- Focusable worker tokens live inside board target buttons; avoid nested button elements. */
+  function workerToken(index: number) {
+    return (
+      <span
+        key={index}
+        role="button"
+        tabIndex={0}
+        aria-label={`Arbeider ${index + 1}. Velg eller dra for å flytte.`}
+        aria-pressed={chosen === index}
+        className={`draft-worker p${view} ${chosen === index ? 'chosen' : ''}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!suppressClick.current) setChosen(index);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            e.stopPropagation();
+            setChosen(index);
+          }
+        }}
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          e.stopPropagation();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          suppressClick.current = false;
+          gesture.current = { index, x: e.clientX, y: e.clientY, moved: false };
+        }}
+        onPointerMove={(e) => {
+          const g = gesture.current;
+          if (!g || g.index !== index) return;
+          if (Math.hypot(e.clientX - g.x, e.clientY - g.y) > 5) g.moved = true;
+          if (g.moved) setDrag({ index, x: e.clientX, y: e.clientY });
+        }}
+        onPointerUp={(e) => {
+          const g = gesture.current;
+          if (!g) return;
+          gesture.current = null;
+          setDrag(null);
+          suppressClick.current = g.moved;
+          if (!g.moved) return;
+          const target = document
+            .elementFromPoint(e.clientX, e.clientY)
+            ?.closest<HTMLElement>('[data-work-target]')?.dataset.workTarget;
+          if (target === 'reserve') placeWorker(null, index);
+          else if (target === 'science' || target === 'money')
+            placeWorker({ job: target }, index);
+          else if (target !== undefined)
+            placeWorker({ tile: Number(target) }, index);
+        }}
+        onPointerCancel={() => {
+          gesture.current = null;
+          setDrag(null);
+          suppressClick.current = true;
+        }}
+      >
+        <Users size={20} />
+        <small>{index + 1}</small>
+      </span>
+    );
+  }
+  /* oxlint-enable jsx-a11y/prefer-tag-over-role */
   function tileYield(i: number) {
-    const t = p.tiles[i];
+    const t = projected.tiles[i];
     if (t.kind === 'wetland') return 'Kan dreneres';
     if (
       game.phase === 'work' &&
-      p.left > 0 &&
+      projected.left > 0 &&
       i < p.rows * 4 &&
       t.workers < (t.kind === 'mill' ? 2 : 1) &&
       !t.auto
     ) {
       const preview = applyAction(
-        { ...game, active: view },
+        {
+          ...game,
+          players: game.players.map((player, id) =>
+            id === view ? projected : player,
+          ),
+          active: view,
+        },
         { type: 'work', tile: i },
       );
       const resource: Resource =
@@ -301,7 +440,8 @@ export default function Home() {
             ? 'science'
             : 'industry';
       const amount =
-        preview.players[view].resources[resource] - p.resources[resource];
+        preview.players[view].resources[resource] -
+        projected.resources[resource];
       return `${amount} ${RESOURCES[resource].toLowerCase()}${t.kind === 'mill' ? ' · 2 plasser' : ''}`;
     }
     const r =
@@ -415,28 +555,48 @@ export default function Home() {
                 <div key={r}>
                   <I size={20} />
                   <span>{RESOURCES[r]}</span>
-                  <b>{p.resources[r]}</b>
+                  <b>
+                    {p.resources[r]}
+                    {planning && projected.resources[r] > p.resources[r] && (
+                      <em className="gain-preview">
+                        {' '}
+                        +{projected.resources[r] - p.resources[r]}
+                      </em>
+                    )}
+                  </b>
                 </div>
               );
             })}
           </div>
-          <div className="worker-box">
+          <div
+            className="worker-box"
+            data-work-target={planning ? 'reserve' : undefined}
+          >
             <Users />
             <b>
-              {p.left} / {p.population} ledige
+              {planning ? current.left - placed.length : p.left} /{' '}
+              {p.population} ledige
             </b>
             <div className="meeple-row">
-              {Array.from({ length: p.population }, (_, i) => (
-                <Users
-                  key={i}
-                  size={20}
-                  className={i < p.left ? 'available' : 'spent'}
-                />
-              ))}
+              {planning ? (
+                assignments.map((a, i) => (a === null ? workerToken(i) : null))
+              ) : (
+                <span>{p.left} arbeidere i reserve</span>
+              )}
             </div>
+            {planning && (
+              <button
+                className="reserve-return"
+                onClick={() => {
+                  if (chosen !== null) placeWorker(null);
+                }}
+              >
+                Tilbake til reserve
+              </button>
+            )}
             <p>
-              {game.phase === 'work'
-                ? 'Velg et område på brettet, eller sett en arbeider til forskning og handel.'
+              {planning
+                ? 'Dra arbeiderne til brettet. Eller velg en arbeider og trykk på et felt. Slipp dem her for å ta dem tilbake.'
                 : 'Ny befolkning kan arbeide fra neste runde.'}
             </p>
           </div>
@@ -481,18 +641,21 @@ export default function Home() {
             className="land-board illustrated"
             style={{ backgroundImage: 'url(art/valley.png)' }}
           >
-            {p.tiles.map((t, i) => {
+            {projected.tiles.map((t, i) => {
               const locked = i >= p.rows * 4;
               return (
                 <button
                   key={i}
+                  data-work-target={planning ? i : undefined}
                   aria-label={`Område ${i + 1}: ${TILE_NAMES[t.kind]}. ${locked ? 'Låst.' : tileYield(i)} ${t.workers ? 'Bemannet.' : ''}`}
                   onClick={() =>
-                    locked
-                      ? setMessage(
-                          'Bygg vei, kanal eller bro i investeringsfasen for å åpne neste rad.',
-                        )
-                      : tileClick(i)
+                    suppressClick.current
+                      ? (suppressClick.current = false)
+                      : locked
+                        ? setMessage(
+                            'Bygg vei, kanal eller bro i investeringsfasen for å åpne neste rad.',
+                          )
+                        : tileClick(i)
                   }
                   className={`land-tile ${locked ? 'locked' : ''} ${t.workers ? 'occupied' : ''} ${t.auto ? 'auto' : ''} ${selected === i ? 'selected' : ''}`}
                   style={
@@ -505,6 +668,12 @@ export default function Home() {
                   </span>
                   {locked ? (
                     <LockKeyhole size={19} />
+                  ) : planning && assignments.some((a) => a?.tile === i) ? (
+                    <span className="tile-workers">
+                      {assignments.map((a, index) =>
+                        a?.tile === i ? workerToken(index) : null,
+                      )}
+                    </span>
                   ) : t.workers ? (
                     <div className={'worker-token p' + view}>
                       <Users size={22} />
@@ -529,6 +698,40 @@ export default function Home() {
               );
             })}
           </div>
+          {planning && (
+            <div className="placement-plan">
+              <div>
+                <b>
+                  Planlegg arbeidet · {placed.length}/{current.left}
+                </b>
+                <p>
+                  Utbyttet vises med + i ressursoversikten. Brikkene er
+                  foreløpige.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setDraft([]);
+                  setChosen(null);
+                }}
+              >
+                Nullstill
+              </button>
+              <button
+                className="primary"
+                disabled={placed.length !== current.left || !placed.length}
+                onClick={() => play({ type: 'work_plan', placements: placed })}
+              >
+                Lås plassering <Check size={17} />
+              </button>
+            </div>
+          )}
+          {drag && (
+            <div className="drag-ghost" style={{ left: drag.x, top: drag.y }}>
+              <Users size={28} />
+              <b>{drag.index + 1}</b>
+            </div>
+          )}
           <div className="board-caption">
             <span>
               <TreePine size={16} />
@@ -538,12 +741,23 @@ export default function Home() {
           </div>
           <div className="general-jobs">
             <button
-              disabled={!isTurn || game.phase !== 'work' || p.left === 0}
-              onClick={() => play({ type: 'work', job: 'science' })}
+              data-work-target={planning ? 'science' : undefined}
+              disabled={!planning}
+              onClick={() => {
+                if (suppressClick.current) {
+                  suppressClick.current = false;
+                  return;
+                }
+                placeWorker({ job: 'science' });
+              }}
             >
               <FlaskConical size={19} />
               <span>
                 Forskning
+                {planning &&
+                  assignments.map((a, i) =>
+                    a?.job === 'science' ? workerToken(i) : null,
+                  )}
                 <small>
                   1 arbeider → {p.buildings.includes('school') ? 3 : 2}{' '}
                   forskning
@@ -552,12 +766,24 @@ export default function Home() {
               <Plus size={17} />
             </button>
             <button
-              disabled={!isTurn || game.phase !== 'work' || p.left === 0}
-              onClick={() => play({ type: 'work', job: 'money' })}
+              data-work-target={planning ? 'money' : undefined}
+              disabled={!planning}
+              onClick={() => {
+                if (suppressClick.current) {
+                  suppressClick.current = false;
+                  return;
+                }
+                placeWorker({ job: 'money' });
+              }}
             >
               <Coins size={19} />
               <span>
-                Handelshuset<small>1 arbeider → 2 penger</small>
+                Handelshuset
+                {planning &&
+                  assignments.map((a, i) =>
+                    a?.job === 'money' ? workerToken(i) : null,
+                  )}
+                <small>1 arbeider → 2 penger</small>
               </span>
               <Plus size={17} />
             </button>
@@ -578,7 +804,7 @@ export default function Home() {
           </h2>
           <p>
             {game.phase === 'work'
-              ? 'Velg hvor arbeidere skal gjøre nytte. Produksjonen kommer med én gang.'
+              ? 'Dra arbeiderne dit de skal gjøre nytte. Se utbyttet, flytt dem rundt og lås plasseringen når du er klar.'
               : 'Forsk frem teknologi, bygg landet og sørg for at alle får mat.'}
           </p>
           <div
@@ -758,6 +984,8 @@ export default function Home() {
               const prev = undo.at(-1)!;
               ref.current = prev;
               setGame(prev);
+              setDraft([]);
+              setChosen(null);
               setView(prev.active);
               setUndo((u) => u.slice(0, -1));
               setMessage('Siste handling er angret.');
@@ -785,6 +1013,8 @@ export default function Home() {
               const loaded = parseSave(await f.text());
               ref.current = loaded;
               setGame(loaded);
+              setDraft([]);
+              setChosen(null);
               setView(loaded.active);
               setStarted(true);
               setUndo([]);
@@ -1064,10 +1294,13 @@ export default function Home() {
               <div className="rules">
                 <h3>1. Sett arbeiderne i arbeid</h3>
                 <p>
-                  Landene plasserer én arbeider etter tur. Klikk på et ledig
-                  felt, eller bruk forskning og handelshuset under brettet. Du
-                  får ressursene med én gang. Alle begynner med to arbeidere.
-                  Feltene har én plass, unntatt tekstilmøller som har to.
+                  Hvert land planlegger alle sine ledige arbeidere før turen går
+                  videre. Dra brikkene til et felt, forskning eller
+                  handelshuset. Flytt dem fritt eller tilbake til reserven. Du
+                  kan også velge en brikke og klikke på målet. Ressursene kommer
+                  først når du trykker «Lås plassering». Alle begynner med to
+                  arbeidere. Feltene har én plass, unntatt tekstilmøller som har
+                  to.
                 </p>
                 <h3>2. Invester i fremtiden</h3>
                 <p>

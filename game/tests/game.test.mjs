@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   createGame,
   applyAction,
+  previewWork,
   CARDS,
   stock,
   parseSave,
@@ -169,4 +170,65 @@ test('bad save input rejected', () => {
   const g = createGame(['A', 'B']);
   g.players[0].resources.food = -1;
   assert.throws(() => parseSave(JSON.stringify(g)));
+});
+
+test('planning, moving and cancelling never mutate committed resources or bonuses', () => {
+  const g = createGame(['A', 'B']);
+  g.players[0].techs = ['drill'];
+  const before = structuredClone(g);
+  const first = previewWork(g, [{ tile: 0 }]);
+  assert.equal(first.players[0].resources.food, 8);
+  const moved = previewWork(g, [{ job: 'money' }]);
+  assert.equal(moved.players[0].resources.food, 4);
+  assert.equal(moved.players[0].resources.money, 6);
+  assert.deepEqual(moved.players[0].used, []);
+  assert.deepEqual(previewWork(g, []), g);
+  assert.deepEqual(g, before);
+});
+test('locking applies exactly the preview and hands over only after the whole plan', () => {
+  const g = createGame(['A', 'B']);
+  const placements = [{ tile: 0 }, { job: 'science' }];
+  const locked = applyAction(g, { type: 'work_plan', placements });
+  assert.deepEqual(locked, previewWork(g, placements));
+  assert.equal(locked.active, 1);
+  assert.equal(locked.players[0].left, 0);
+  assert.equal(locked.players[1].left, 2);
+  const done = applyAction(locked, { type: 'work_plan', placements });
+  assert.equal(done.phase, 'invest');
+  assert.equal(done.active, done.first);
+});
+test('invalid complete plans fail atomically; partial plans cannot be locked', () => {
+  const g = createGame(['A', 'B']);
+  const before = structuredClone(g);
+  for (const placements of [
+    [{ tile: 0 }],
+    [{ tile: 0 }, { tile: 0 }],
+    [{ tile: 1 }, { tile: 99 }],
+    [{ tile: 0, job: 'money' }, { tile: 1 }],
+  ]) {
+    assert.throws(() => applyAction(g, { type: 'work_plan', placements }));
+    assert.deepEqual(g, before);
+  }
+});
+test('full games using locked plans terminate and preserve valid saves', () => {
+  for (let count = 2; count <= 5; count++) {
+    let g = createGame(Array.from({ length: count }, (_, i) => String(i)));
+    let actions = 0;
+    while (g.phase !== 'finished' && actions++ < 200) {
+      g = applyAction(
+        g,
+        g.phase === 'work'
+          ? {
+              type: 'work_plan',
+              placements: Array.from(
+                { length: g.players[g.active].left },
+                () => ({ job: 'money' }),
+              ),
+            }
+          : { type: 'pass' },
+      );
+      assert.deepEqual(parseSave(JSON.stringify(g)), g);
+    }
+    assert.equal(g.phase, 'finished');
+  }
 });

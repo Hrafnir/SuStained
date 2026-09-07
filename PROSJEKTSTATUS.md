@@ -4,7 +4,7 @@
 
 `game/` inneholder nå en spillbar Tier I-prototype med 15 teknologier, fem per gren. Den nye gjeldende kortlisten og alle virkningene ligger i `game/lib/game.ts`. Historiske kilder er lenket fra hvert kort. Regelheftet finnes inne i spillet.
 
-Prototypen bruker åtte runder med to investeringer per land per runde, umiddelbar produksjon ved arbeiderplassering, handel begrenset av mottatte enheter, og matbetaling etter investeringsfasen. Alle 15 teknologier er åpne fra start for å prøve hele settet. Dette er bevisste prototypevalg, ikke en ferdig modell for hele kampanjens epokeåpning.
+Prototypen bruker åtte runder med to investeringer per land per runde, foreløpig arbeiderplassering med dra-og-slipp og produksjon først ved «Lås plassering», handel begrenset av mottatte enheter, og matbetaling etter investeringsfasen. Alle 15 teknologier er åpne fra start for å prøve hele settet. Dette er bevisste prototypevalg, ikke en ferdig modell for hele kampanjens epokeåpning.
 
 Spilles på delt skjerm av 2–5 mennesker. Fullført Tier I-test slutter i 1800 med poengtelling. Ingen Tier II/III eller samarbeidsfase er implementert ennå. Nettspill er heller ikke implementert. Brukeren har bedt om GitHub-publisering; denne utgaven leveres via GitHub Pages.
 
