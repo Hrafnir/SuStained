@@ -1,10 +1,10 @@
-# Prosjektstatus — 7. september 2026
+# Prosjektstatus — 8. september 2026
 
 ## Implementert første milepæl
 
-`game/` inneholder nå en spillbar Tier I-prototype med 15 teknologier, fem per gren. Den nye gjeldende kortlisten og alle virkningene ligger i `game/lib/game.ts`. Historiske kilder er lenket fra hvert kort. Regelheftet finnes inne i spillet.
+`game/` inneholder nå en spillbar Tier I-prototype med 21 teknologier, sju per gren. Den nye gjeldende kortlisten og alle virkningene ligger i `game/lib/game.ts`. Historiske kilder er lenket fra hvert kort. Regelheftet finnes inne i spillet.
 
-Prototypen bruker åtte runder med to investeringer per land per runde, foreløpig arbeiderplassering med dra-og-slipp og produksjon først ved «Lås plassering», handel begrenset av mottatte enheter, og matbetaling etter investeringsfasen. Alle 15 teknologier er åpne fra start for å prøve hele settet. Dette er bevisste prototypevalg, ikke en ferdig modell for hele kampanjens epokeåpning.
+Prototypen bruker åtte runder med to investeringer per land per runde, foreløpig arbeiderplassering med dra-og-slipp og produksjon først ved «Lås plassering», handel begrenset av mottatte enheter, og matbetaling etter investeringsfasen. Opptil tre nye teknologier åpnes hver runde etter en fast historisk plan. Tidligere kort forblir tilgjengelige. Hvert land får en statusside med manuell matfordeling, forhåndsvisning av konsekvenser og bekreftelse før turen går videre. Dette er bevisste prototypevalg, ikke en ferdig modell for hele kampanjens epokeåpning.
 
 Spilles på delt skjerm av 2–5 mennesker. Fullført Tier I-test slutter i 1800 med poengtelling. Ingen Tier II/III eller samarbeidsfase er implementert ennå. Nettspill er heller ikke implementert. Brukeren har bedt om GitHub-publisering; denne utgaven leveres via GitHub Pages.
 
@@ -12,7 +12,7 @@ Spilles på delt skjerm av 2–5 mennesker. Fullført Tier I-test slutter i 1800
 
 Brukerens neste bestilling erstatter tidligere produksjonsrekkefølge:
 
-- Tier 1 skal ha **15 teknologier: fem industri, fem transport og fem mat**.
+- Tier 1 skal ha **21 teknologier: sju industri, sju transport og sju mat** (utvidet etter spilltest 8. september).
 - Tier 1: ca. **1700–1800**. Tier 2: **1800–1900**. Tier 3: **1900–1980**.
 - Kortene skal gi historisk rimelige og logiske effekter: utbytte, arealtilgang, handel og byggbar infrastruktur med bonuser.
 - Prosjektet skal først bli et fullt spillbart digitalt brettspill med gjennomarbeidet spillflyt, UI, illustrasjoner, kort og brikker. Fysisk produksjon kommer etter digital prototyping.

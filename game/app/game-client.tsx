@@ -40,6 +40,10 @@ import {
   ROUND_YEARS,
   createGame,
   applyAction,
+  foodStatus,
+  availableTechnology,
+  availableRound,
+  TECHNOLOGY_ROUNDS,
   previewWork,
   type WorkPlacement,
   parseSave,
@@ -85,6 +89,7 @@ function CostLabel({ cost }: { cost: Cost }) {
 }
 export default function Home() {
   const [game, setGame] = useState<Game>(() => createGame(NAMES.slice(0, 3)));
+  const [foodAmount, setFoodAmount] = useState(0);
   const [draft, setDraft] = useState<(WorkPlacement | null)[]>([]);
   const [chosen, setChosen] = useState<number | null>(null);
   const [drag, setDrag] = useState<{
@@ -160,6 +165,7 @@ export default function Home() {
       setUndo((u) => [...u.slice(-29), previous]);
       ref.current = next;
       setGame(next);
+      setFoodAmount(0);
       setDraft([]);
       setChosen(null);
       setView(next.active);
@@ -223,6 +229,8 @@ export default function Home() {
                   'trade',
                   'grow',
                   'pass',
+                  'feed',
+                  'resume_invest',
                 ],
               },
               placements: {
@@ -236,6 +244,7 @@ export default function Home() {
                   additionalProperties: false,
                 },
               },
+              amount: { type: 'integer', minimum: 0 },
               id: { type: 'string' },
               tile: { type: 'integer' },
               job: { enum: ['science', 'money'] },
@@ -273,9 +282,10 @@ export default function Home() {
   const filtered = CARDS.filter(
     (c) =>
       (branch === 'all' || c.branch === branch) &&
-      (!owned || p.techs.includes(c.id)),
+      (owned ? p.techs.includes(c.id) : availableTechnology(game, c)),
   );
   const need = upkeep(p);
+  const meal = foodStatus(current, foodAmount);
   const natural = p.tiles.filter((t) =>
     ['forest', 'wetland'].includes(t.kind),
   ).length;
@@ -513,7 +523,7 @@ export default function Home() {
           <div>
             <span className="eyebrow">SPILL SAMMEN PÅ ÉN SKJERM</span>
             <h2>Bygg et land. Sett spor i historien.</h2>
-            <p>2–5 spillere · 8 runder · 15 teknologier · Tier I</p>
+            <p>2–5 spillere · 8 runder · 21 teknologier · Tier I</p>
           </div>
           <button className="primary" onClick={() => setModal('setup')}>
             Start spill <ArrowRight size={18} />
@@ -798,9 +808,11 @@ export default function Home() {
           <h2>
             {game.phase === 'work'
               ? 'Skap fremgang.'
-              : game.phase === 'invest'
-                ? 'Sett ideene i verk.'
-                : 'Et land i utvikling.'}
+              : game.phase === 'food'
+                ? 'Sørg for alle.'
+                : game.phase === 'invest'
+                  ? 'Sett ideene i verk.'
+                  : 'Et land i utvikling.'}
           </h2>
           <p>
             {game.phase === 'work'
@@ -819,8 +831,10 @@ export default function Home() {
             02 <b>Investeringer</b>
             {game.phase === 'invest' && <span>{current.investments}/2</span>}
           </div>
-          <div className="turn-step">
-            03 <b>Mat og vekst</b>
+          <div
+            className={'turn-step ' + (game.phase === 'food' ? 'active' : '')}
+          >
+            03 <b>Status og matfordeling</b>
           </div>
           {view !== game.active && game.phase !== 'finished' ? (
             <button className="primary" onClick={() => setView(game.active)}>
@@ -866,7 +880,7 @@ export default function Home() {
                   disabled={!canInvest}
                   onClick={() => play({ type: 'pass' })}
                 >
-                  Avslutt investeringer <ArrowRight size={17} />
+                  Til status og mat <ArrowRight size={17} />
                 </button>
               )}
             </>
@@ -904,13 +918,34 @@ export default function Home() {
             {owned ? 'Vis markedet' : `Mine teknologier (${p.techs.length})`}
           </button>
         </div>
+        {!owned && (
+          <div className="market-release">
+            <b>
+              Runde {game.round} ·{' '}
+              {CARDS.filter((c) => availableTechnology(game, c)).length} av 21
+              teknologier åpnet
+            </b>
+            <p>
+              Nytt nå:{' '}
+              {TECHNOLOGY_ROUNDS[game.round - 1]
+                .map((id) => CARDS.find((c) => c.id === id)!.name)
+                .join(' · ')}
+            </p>
+            <p>
+              {game.round < 8
+                ? `Neste runde: ${TECHNOLOGY_ROUNDS[game.round].map((id) => CARDS.find((c) => c.id === id)!.name).join(' · ')}`
+                : 'Alle Tier I-teknologier er nå åpnet.'}{' '}
+              Tidligere kort blir liggende så lenge det finnes eksemplarer.
+            </p>
+          </div>
+        )}
         <div className="market-filters">
           <Tabs value={branch} onValueChange={(v) => setBranch(String(v))}>
             <TabsList>
               <TabsTrigger value="all">Alle teknologier</TabsTrigger>
               {Object.entries(BRANCHES).map(([k, v]) => (
                 <TabsTrigger key={k} value={k}>
-                  {v} · 5
+                  {v} · 7
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -925,7 +960,9 @@ export default function Home() {
               onClick={() => setCard(c)}
             >
               <div className="card-art" style={atlas(c.art)}>
-                <span className="card-tier">I</span>
+                <span className="card-tier">
+                  {availableRound(c.id) === game.round ? 'NY · I' : 'I'}
+                </span>
                 <span className="card-year">{c.year.split(' · ')[0]}</span>
                 {p.techs.includes(c.id) && (
                   <span className="researched">
@@ -1031,6 +1068,133 @@ export default function Home() {
         />
       </footer>
       <Dialog
+        open={started && game.phase === 'food'}
+        onOpenChange={(open) => {
+          if (!open) play({ type: 'resume_invest' });
+        }}
+      >
+        <DialogContent className="game-dialog food-dialog">
+          <p className="eyebrow">
+            RUNDE {game.round} · {ROUND_YEARS[game.round - 1]} · LANDETS STATUS
+          </p>
+          <DialogTitle className="dialog-title">
+            Et måltid til {current.name}.
+          </DialogTitle>
+          <DialogDescription>
+            Fordel mat før turen går videre. Ingenting trekkes før du bekrefter.
+          </DialogDescription>
+          <div className="food-summary">
+            <div>
+              <Users />
+              <b>{current.population}</b>
+              <span>Innbyggere</span>
+            </div>
+            <div>
+              <Sprout />
+              <b>{meal.available}</b>
+              <span>Mat tilgjengelig</span>
+            </div>
+            <div>
+              <Factory />
+              <b>{current.resources.industry}</b>
+              <span>Industri</span>
+            </div>
+            <div>
+              <FlaskConical />
+              <b>{current.resources.science}</b>
+              <span>Forskning</span>
+            </div>
+          </div>
+          <p>
+            Penger: {current.resources.money} · Matlager:{' '}
+            {current.resources.food} · Vekselbruk: +{meal.rotation} ·
+            Kornrensing: +{meal.cleaning}. Matbehov: <b>{meal.need}</b>
+            {meal.need < current.population ? ' (redusert av husdyravl)' : ''}.
+          </p>
+          <div className="ration-row" aria-label="Matrasjoner">
+            {Array.from({ length: meal.need }, (_, i) => (
+              <button
+                key={i}
+                className={i < foodAmount ? 'ration filled' : 'ration'}
+                aria-label={`Fordel ${i + 1} matrasjoner`}
+                aria-pressed={i < foodAmount}
+                disabled={i >= meal.available}
+                onClick={() => setFoodAmount(i + 1 === foodAmount ? i : i + 1)}
+              >
+                <Sprout size={26} />
+                <span>{i < foodAmount ? 'Mat fordelt' : 'Mangler mat'}</span>
+              </button>
+            ))}
+          </div>
+          <div className="ration-controls">
+            <label htmlFor="food-amount">Fordel mat</label>
+            <Input
+              id="food-amount"
+              type="number"
+              min={0}
+              max={Math.min(meal.need, meal.available)}
+              value={foodAmount}
+              onChange={(e) =>
+                setFoodAmount(
+                  Math.max(
+                    0,
+                    Math.min(
+                      meal.need,
+                      meal.available,
+                      Math.floor(Number(e.target.value) || 0),
+                    ),
+                  ),
+                )
+              }
+            />
+            <button
+              className="quiet"
+              onClick={() => setFoodAmount(Math.min(meal.need, meal.available))}
+            >
+              Fordel så mye som mulig
+            </button>
+          </div>
+          <div
+            className={'meal-result ' + (meal.shortage ? 'shortage' : '')}
+            aria-live="polite"
+          >
+            <b>
+              {meal.shortage
+                ? `${meal.shortage} matrasjoner mangler`
+                : 'Alle får maten de trenger'}
+            </b>
+            <p>
+              {meal.lost
+                ? `Du mister ${meal.lost} innbyggere. ${current.population - meal.lost} blir igjen og kan arbeide neste runde.`
+                : meal.shortage
+                  ? 'Du beholder den siste innbyggeren, selv ved matmangel.'
+                  : `${current.population} innbyggere beholdes.`}
+            </p>
+            <p>
+              Mat etter fordeling: <b>{meal.remaining}</b> · Poeng etter
+              fordeling: <b>{score(current) - meal.lost * 2}</b>
+            </p>
+          </div>
+          <div className="meal-actions">
+            <button
+              className="quiet"
+              onClick={() => play({ type: 'resume_invest' })}
+            >
+              Tilbake til investeringer og handel
+            </button>
+            <button
+              className="primary"
+              onClick={() => play({ type: 'feed', amount: foodAmount })}
+            >
+              {meal.lost
+                ? `Bekreft · mist ${meal.lost} innbyggere`
+                : 'Bekreft matfordeling'}{' '}
+              <ArrowRight size={17} />
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
         open={card !== null}
         onOpenChange={(open) => !open && setCard(null)}
       >
@@ -1038,7 +1202,9 @@ export default function Home() {
           {card && (
             <>
               <div className="detail-art" style={atlas(card.art)}>
-                <span className="card-tier">I</span>
+                <span className="card-tier">
+                  {availableRound(card.id) === game.round ? 'NY · I' : 'I'}
+                </span>
               </div>
               <div className="detail-content">
                 <p className="eyebrow">
@@ -1308,8 +1474,7 @@ export default function Home() {
                   investeringer. Landet fullfører begge før neste land begynner.
                   En investering er én teknologi, ett bygg eller én
                   befolkningsvekst. Du kan handle før, mellom og etter
-                  investeringene. Trykk «Avslutt investeringer» når du er
-                  ferdig.
+                  investeringene. Trykk «Til status og mat» når du er ferdig.
                 </p>
                 <p>
                   Teknologi kjøpes med forskning. Bygg krever industri og
@@ -1320,11 +1485,12 @@ export default function Home() {
                 </p>
                 <h3>3. Sørg for mat</h3>
                 <p>
-                  Etter alles investeringer utløses vekselbruk, deretter spiser
-                  hver innbygger én mat. Husdyravl kan redusere behovet. Hver
-                  manglende mat koster én innbygger, men du beholder alltid
-                  minst én. Resterende ressurser beholdes. Startspilleren
-                  roterer.
+                  Etter dine investeringer åpnes landets statusside. Vekselbruk
+                  og kornrensing inngår i matlageret. Fordel én mat per
+                  innbygger og bekreft fordelingen før neste land overtar.
+                  Husdyravl kan redusere behovet. Hver manglende mat koster én
+                  innbygger, men du beholder alltid minst én. Resterende
+                  ressurser beholdes. Startspilleren roterer.
                 </p>
                 <h3>Befolkning og handel</h3>
                 <p>
@@ -1346,9 +1512,11 @@ export default function Home() {
                   Tilstøtende betyr felles side, aldri diagonal. Treskeverk
                   aktiverer ett ledig nabofelt uten bonuser; feltet kan ikke
                   brukes igjen samme runde. Skogshøsting bevarer skogen. Åker,
-                  verksted, gruve og drenering endrer naturen. Alle kort er
-                  synlige fra start; grunnkort finnes til alle, spesialiseringer
-                  til halvparten av spillerne avrundet opp.
+                  verksted, gruve og drenering endrer naturen. Tier I har 21
+                  kort, sju per område. Opptil tre nye teknologier åpnes hver
+                  runde, i en fast historisk rekkefølge. Tidligere kort blir
+                  tilgjengelige videre. Grunnkort finnes til alle,
+                  spesialiseringer til halvparten av spillerne avrundet opp.
                 </p>
                 <h3>Om prototypen</h3>
                 <p>

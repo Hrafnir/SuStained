@@ -238,7 +238,103 @@ export const CARDS: Card[] = [
     source:
       'https://historicengland.org.uk/images-books/publications/historic-farmsteads-preliminary-character-statement-east-midlands/historic-farmsteads-east-midlands-part2/',
   },
+  {
+    id: 'shuttle',
+    name: 'Flygende skyttel',
+    branch: 'industry',
+    year: '1733 · Kay',
+    cost: 3,
+    art: 5,
+    effect: 'Første bemannede verksted hver runde gir +1 industri.',
+    history:
+      'Skyttelen gjorde håndveving raskere. Bonusen gjelder verkstedets veving og kan kombineres med bedre spinning.',
+    source: museum,
+  },
+  {
+    id: 'boring',
+    name: 'Presisjonsboring',
+    branch: 'industry',
+    year: 'ca. 1775 · Wilkinson',
+    cost: 4,
+    art: 2,
+    requires: 'newcomen',
+    effect:
+      'Første bemannede gruve hver runde gir +1 industri når du har atmosfærisk dampmaskin.',
+    history:
+      'Mer presise sylindre forbedret dampmaskiner. Gruvebonusen representerer mer pålitelig pumping.',
+    source: 'https://collection.sciencemuseumgroup.org.uk/objects/co46448',
+  },
+  {
+    id: 'sextant',
+    name: 'Sekstant',
+    branch: 'transport',
+    year: '1757 · Navigasjon',
+    cost: 3,
+    art: 7,
+    effect: 'Øk handelskapasiteten med 1 per runde.',
+    history:
+      'Et større måleområde forbedret observasjoner til sjøs. Handelskapasiteten er spillets forenkling av sikrere navigasjon.',
+    source:
+      'https://www.rmg.co.uk/stories/time/longitude-found-nevil-maskelyne-lunar-method',
+  },
+  {
+    id: 'almanac',
+    name: 'Nautisk almanakk',
+    branch: 'transport',
+    year: '1767 · Maskelyne',
+    cost: 3,
+    art: 7,
+    requires: 'octant',
+    effect: 'Første arbeider i handelshuset hver runde gir +1 penge.',
+    history:
+      'Publiserte månetabeller støttet bestemmelse av lengdegrad. Oktanten representerer nødvendig måleutstyr i spillet.',
+    source:
+      'https://www.rmg.co.uk/stories/space-astronomy/history-royal-observatory',
+  },
+  {
+    id: 'plough',
+    name: 'Rotherham-plog',
+    branch: 'food',
+    year: '1730 · Jordbearbeiding',
+    cost: 3,
+    art: 1,
+    effect: 'Første arbeider på en udrenert åker hver runde gir +1 mat.',
+    history:
+      'En lettere svingplog gjorde jordbearbeiding mer effektiv. Spillets bonus representerer bedre dyrking av eksisterende åker.',
+    source:
+      'https://www.mountvernon.org/library/digitalhistory/digital-encyclopedia/article/agricultural-equipment',
+  },
+  {
+    id: 'winnowing',
+    name: 'Kornrensemaskin',
+    branch: 'food',
+    year: '1737 · Kornrensing',
+    cost: 3,
+    art: 1,
+    effect: 'Ved matfordeling: +1 mat dersom minst én åker er bemannet.',
+    history:
+      'Viftedrevet rensing skilte agner fra korn. Matbonusen representerer mer brukbart korn, ikke økt biologisk avling.',
+    source:
+      'https://digi.ub.uni-heidelberg.de/diglit/tools_tillage1976_1979/0036',
+  },
 ];
+/** Public, deterministic introductions; cards remain available after release. */
+export const TECHNOLOGY_ROUNDS = [
+  ['roads', 'rotation', 'drainage'],
+  ['drill', 'coke', 'newcomen'],
+  ['plough'],
+  ['octant', 'shuttle', 'winnowing'],
+  ['breeding', 'sextant', 'chronometer'],
+  ['canals', 'jenny', 'waterframe'],
+  ['watt', 'almanac', 'boring'],
+  ['bridge', 'thresher'],
+];
+export function availableRound(id: string) {
+  return TECHNOLOGY_ROUNDS.findIndex((ids) => ids.includes(id)) + 1;
+}
+export function availableTechnology(g: Game, c: Card) {
+  return availableRound(c.id) > 0 && availableRound(c.id) <= g.round;
+}
 export const BRANCHES = {
   industry: 'Industri',
   transport: 'Transport',
@@ -294,9 +390,9 @@ export interface Player {
   growth: boolean;
 }
 export interface Game {
-  version: 1;
+  version: 1 | 2;
   round: number;
-  phase: 'work' | 'invest' | 'finished';
+  phase: 'work' | 'invest' | 'food' | 'finished';
   active: number;
   first: number;
   players: Player[];
@@ -398,11 +494,13 @@ export type Action =
   | { type: 'build'; id: string; tile?: number }
   | { type: 'trade'; from: Resource; to: Resource }
   | { type: 'grow' }
-  | { type: 'pass' };
+  | { type: 'pass' }
+  | { type: 'feed'; amount: number }
+  | { type: 'resume_invest' };
 export function createGame(names: string[], seed = 17): Game {
   if (names.length < 2 || names.length > 5) throw Error('Velg 2–5 spillere.');
   return {
-    version: 1,
+    version: 2,
     round: 1,
     phase: 'work',
     active: 0,
@@ -531,6 +629,8 @@ export function buildReason(g: Game, id: string, tile?: number) {
 }
 export function researchReason(g: Game, c: Card) {
   const p = g.players[g.active];
+  if (!availableTechnology(g, c))
+    return `Tilgjengelig fra runde ${availableRound(c.id)}.`;
   if (g.phase !== 'invest') return 'Forsk i investeringsfasen.';
   if (p.investments < 1) return 'Ingen investeringer igjen.';
   if (p.techs.includes(c.id)) return 'Du kjenner denne teknologien.';
@@ -565,6 +665,12 @@ export function applyAction(original: Game, a: Action): Game {
       if (!['science', 'money'].includes(a.job)) throw Error('Ukjent arbeid.');
       r = a.job;
       gain = a.job === 'science' ? (p.buildings.includes('school') ? 3 : 2) : 2;
+      if (
+        a.job === 'money' &&
+        p.techs.includes('almanac') &&
+        once(p, 'almanac')
+      )
+        gain++;
       label = a.job === 'science' ? 'forskning' : 'handelshuset';
     } else {
       if (
@@ -587,6 +693,8 @@ export function applyAction(original: Game, a: Action): Game {
       } else if (t.kind === 'farm') {
         r = 'food';
         gain = t.drained ? 4 : 3;
+        if (!t.drained && p.techs.includes('plough') && once(p, 'plough'))
+          gain++;
         if (p.techs.includes('drill') && once(p, 'drill')) gain++;
         if (p.techs.includes('thresher') && !p.used.includes('thresher')) {
           const ni = p.tiles.findIndex(
@@ -623,6 +731,19 @@ export function applyAction(original: Game, a: Action): Game {
           once(p, 'watt')
         )
           gain++;
+        if (
+          t.kind === 'workshop' &&
+          p.techs.includes('shuttle') &&
+          once(p, 'shuttle')
+        )
+          gain++;
+        if (
+          t.kind === 'mine' &&
+          p.techs.includes('newcomen') &&
+          p.techs.includes('boring') &&
+          once(p, 'boring')
+        )
+          gain++;
         if (t.kind !== 'forest') p.history += gain;
       }
     }
@@ -643,6 +764,7 @@ export function applyAction(original: Game, a: Action): Game {
     p.techs.push(c.id);
     p.investments--;
     if (c.id === 'octant') p.trade += 2;
+    if (c.id === 'sextant') p.trade += 1;
     event(g, `${p.name} forsker frem ${c.name}.`);
   } else if (a.type === 'build') {
     const reason = buildReason(g, a.id, a.tile);
@@ -695,37 +817,29 @@ export function applyAction(original: Game, a: Action): Game {
       `${p.name} vokser til ${p.population} innbyggere. Ny arbeider fra neste runde.`,
     );
   } else if (a.type === 'pass') {
-    if (g.phase !== 'invest') throw Error('Plasser arbeiderne dine først.');
+    if (g.phase !== 'invest') throw Error('Avslutt investeringene først.');
+    g.phase = 'food';
+    event(g, `${p.name} går til matfordeling.`);
+  } else if (a.type === 'resume_invest') {
+    if (g.phase !== 'food') throw Error('Du er ikke på matfordelingen.');
+    g.phase = 'invest';
+  } else if (a.type === 'feed') {
+    if (g.phase !== 'food') throw Error('Gå til matfordeling først.');
+    const status = foodStatus(p, a.amount);
+    if (
+      !Number.isInteger(a.amount) ||
+      a.amount < 0 ||
+      a.amount > Math.min(status.available, status.need)
+    )
+      throw Error('Fordel et gyldig antall matrasjoner.');
+    p.resources.food = status.remaining;
+    p.population -= status.lost;
     p.passed = true;
-    event(g, `${p.name} avslutter investeringene.`);
+    event(
+      g,
+      `${p.name}: ${status.bonus} bonusmat, fordeler ${a.amount}/${status.need} mat. ${status.remaining} mat igjen. ${status.lost ? `Mister ${status.lost} innbyggere; ${p.population} igjen.` : 'Alle innbyggere beholdes.'}`,
+    );
     if (g.players.every((x) => x.passed)) {
-      for (const x of g.players) {
-        if (
-          x.techs.includes('rotation') &&
-          x.tiles.some(
-            (t, i) =>
-              t.kind === 'farm' &&
-              t.workers > 0 &&
-              x.tiles.some(
-                (v, j) => v.kind === 'farm' && v.workers > 0 && adjacent(i, j),
-              ),
-          )
-        ) {
-          x.resources.food += 2;
-          event(g, `${x.name}: vekselbruk gir +2 mat.`);
-        }
-        const need = upkeep(x),
-          short = Math.max(0, need - x.resources.food);
-        x.resources.food = Math.max(0, x.resources.food - need);
-        if (short) {
-          const lost = Math.min(short, x.population - 1);
-          x.population -= lost;
-          event(
-            g,
-            `${x.name} mangler ${short} mat og mister ${lost} innbyggere.`,
-          );
-        } else event(g, `${x.name} betaler ${need} mat.`);
-      }
       if (g.round === 8) {
         g.phase = 'finished';
         const high = Math.max(...g.players.map(score));
@@ -752,7 +866,10 @@ export function applyAction(original: Game, a: Action): Game {
         }
         event(g, `${ROUND_YEARS[g.round - 1]} · Ny runde.`);
       }
-    } else next(g, (x) => !x.passed);
+    } else {
+      g.phase = 'invest';
+      next(g, (x) => !x.passed);
+    }
   } else throw Error('Ukjent handling.');
   return g;
 }
@@ -767,11 +884,11 @@ export function parseSave(text: string): Game {
   if (
     !g ||
     typeof g !== 'object' ||
-    g.version !== 1 ||
+    ![1, 2].includes(g.version) ||
     !Number.isInteger(g.round) ||
     g.round < 1 ||
     g.round > 8 ||
-    !['work', 'invest', 'finished'].includes(g.phase) ||
+    !['work', 'invest', 'food', 'finished'].includes(g.phase) ||
     !Array.isArray(g.players) ||
     g.players.length < 2 ||
     g.players.length > 5 ||
@@ -831,6 +948,15 @@ export function parseSave(text: string): Game {
     )
       throw Error('Ugyldige spillerdata.');
   }
+  // Legacy saves paid everyone together; no player has eaten yet during investment.
+  if (g.version === 1) {
+    if (g.phase === 'invest')
+      for (const p of g.players) {
+        if (p.passed) p.investments = 0;
+        p.passed = false;
+      }
+    g.version = 2;
+  }
   if (g.phase === 'finished') {
     const highest = Math.max(...g.players.map(score));
     g.winner = g.players
@@ -858,4 +984,38 @@ export function previewWork(original: Game, placements: WorkPlacement[]): Game {
     result = applyAction(result, { ...placement, type: 'work' });
   }
   return result;
+}
+
+export function foodStatus(p: Player, amount = 0) {
+  const rotation =
+    p.techs.includes('rotation') &&
+    p.tiles.some(
+      (t, i) =>
+        t.kind === 'farm' &&
+        t.workers > 0 &&
+        p.tiles.some(
+          (v, j) => v.kind === 'farm' && v.workers > 0 && adjacent(i, j),
+        ),
+    )
+      ? 2
+      : 0;
+  const cleaning =
+    p.techs.includes('winnowing') &&
+    p.tiles.some((t) => t.kind === 'farm' && t.workers > 0)
+      ? 1
+      : 0;
+  const bonus = rotation + cleaning;
+  const need = upkeep(p),
+    available = p.resources.food + bonus;
+  const shortage = Math.max(0, need - amount);
+  return {
+    need,
+    available,
+    bonus,
+    rotation,
+    cleaning,
+    shortage,
+    lost: Math.min(shortage, p.population - 1),
+    remaining: available - amount,
+  };
 }

@@ -1,6 +1,6 @@
 # Sustained — playable Tier I prototype
 
-Norwegian local hotseat board game for 2–5 people. Eight rounds, 15 historically grounded technologies (five industry, five transport, five food), a 4×4 land board, worker allocation, research, construction, limited trading, population growth, food upkeep and final scoring.
+Norwegian local hotseat board game for 2–5 people. Eight rounds, 21 historically grounded technologies (seven industry, seven transport, seven food), a 4×4 land board, worker allocation, research, construction, limited trading, population growth, food upkeep and final scoring.
 
 ## Run
 
@@ -34,3 +34,5 @@ This is the first playable milestone, not the completed two-phase campaign. Tier
 `public/art/valley.png` and `public/art/atlas.png` were generated with built-in ImageGen. The atlas provides nine coherent illustrated environments. Card typography, costs and rules remain editable separately from the art. See `design/art-prompts.md` for prompts. The print stylesheet provides a draft 63×102 mm card layout; this is not a laser-ready production file.
 
 The optional WebMCP interface exposes `read_game` and `play_game_action` through the same engine. Unsupported browsers skip registration. Both tools were verified in the local browser: a legal action changed the shared state and an illegal tile placement failed without mutation.
+
+Technology releases are deterministic: at most three new cards per round, with previous releases remaining available. Each player ends investment in a separate food allocation phase and explicitly confirms rations and population consequences. Save format 2 migrates format 1 so legacy players who passed investments still receive their food phase.

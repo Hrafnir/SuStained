@@ -2,7 +2,7 @@
 
 **[Spill Tier I-prototypen](https://hrafnir.github.io/SuStained/)** · [Kildekode](https://github.com/Hrafnir/SuStained)
 
-Første spillbare versjon: 2–5 spillere på delt skjerm, 8 runder og 15 teknologier fordelt på industri, transport og mat. Inkluderer landbrett, produksjon, forskning, bygging, handel, mating, vekst, poeng, lagring og angre. Se [utviklingsinstruksjoner](game/README.md).
+Første spillbare versjon: 2–5 spillere på delt skjerm, 8 runder og 21 teknologier fordelt på industri, transport og mat. Inkluderer landbrett, produksjon, forskning, bygging, handel, mating, vekst, poeng, lagring og angre. Se [utviklingsinstruksjoner](game/README.md).
 
 Tier II, Tier III og samarbeidsfasen er fortsatt planlagt. Den digitale versjonen er en prototype med foreløpige balanseverdier.
 

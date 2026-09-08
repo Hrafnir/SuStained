@@ -4,6 +4,10 @@ import {
   createGame,
   applyAction,
   previewWork,
+  foodStatus,
+  availableTechnology,
+  TECHNOLOGY_ROUNDS,
+  availableRound,
   CARDS,
   stock,
   parseSave,
@@ -19,11 +23,11 @@ const invest = () => {
   });
   return g;
 };
-test('15 technologies, exactly five per branch, unique IDs', () => {
-  assert.equal(CARDS.length, 15);
+test('21 technologies, exactly seven per branch, unique IDs', () => {
+  assert.equal(CARDS.length, 21);
   for (const b of ['industry', 'transport', 'food'])
-    assert.equal(CARDS.filter((c) => c.branch === b).length, 5);
-  assert.equal(new Set(CARDS.map((c) => c.id)).size, 15);
+    assert.equal(CARDS.filter((c) => c.branch === b).length, 7);
+  assert.equal(new Set(CARDS.map((c) => c.id)).size, 21);
 });
 test('work rotates players and enters investment phase only after all work', () => {
   let g = createGame(['A', 'B']);
@@ -50,6 +54,7 @@ test('locked, occupied, invalid and wetland placement are rejected without mutat
 });
 test('research costs an investment and cannot be bought twice', () => {
   let g = invest();
+  g.round = 2;
   g = applyAction(g, { type: 'research', id: 'drill' });
   assert.equal(g.players[0].resources.science, 27);
   assert.equal(g.players[0].investments, 1);
@@ -59,6 +64,7 @@ test('research costs an investment and cannot be bought twice', () => {
 });
 test('specialized stock is shared and prerequisites are enforced', () => {
   let g = invest();
+  g.round = 6;
   assert.throws(() => applyAction(g, { type: 'research', id: 'watt' }));
   g = applyAction(g, { type: 'research', id: 'jenny' });
   assert.equal(
@@ -120,8 +126,8 @@ test('growth is bounded and new population does not work until next round', () =
   assert.equal(g.players[0].population, 3);
   assert.equal(g.players[0].left, 0);
   assert.throws(() => applyAction(g, { type: 'grow' }));
-  g = applyAction(g, { type: 'pass' });
-  g = applyAction(g, { type: 'pass' });
+  g = finishTurn(g);
+  g = finishTurn(g);
   assert.equal(g.round, 2);
   assert.equal(g.players[0].left, 3);
   assert.equal(g.active, 1);
@@ -134,8 +140,8 @@ test('food shortage and rotation resolve before next round', () => {
   g.players[1].techs = ['rotation'];
   g.players[1].tiles[0].workers = 1;
   g.players[1].tiles[1] = { kind: 'farm', workers: 1 };
-  g = applyAction(g, { type: 'pass' });
-  g = applyAction(g, { type: 'pass' });
+  g = finishTurn(g);
+  g = finishTurn(g);
   assert.equal(g.players[0].population, 1);
   assert.equal(g.players[1].population, 2);
   assert.equal(g.players[1].resources.food, 0);
@@ -152,7 +158,12 @@ test('full 2–5 player games terminate legally and round-trip save at every act
           ? !p.tiles[0].workers
             ? { type: 'work', tile: 0 }
             : { type: 'work', job: 'science' }
-          : { type: 'pass' },
+          : g.phase === 'food'
+            ? {
+                type: 'feed',
+                amount: Math.min(foodStatus(p).need, foodStatus(p).available),
+              }
+            : { type: 'pass' },
       );
       g = parseSave(JSON.stringify(g));
       count++;
@@ -225,10 +236,134 @@ test('full games using locked plans terminate and preserve valid saves', () => {
                 () => ({ job: 'money' }),
               ),
             }
-          : { type: 'pass' },
+          : g.phase === 'food'
+            ? { type: 'feed', amount: 0 }
+            : { type: 'pass' },
       );
       assert.deepEqual(parseSave(JSON.stringify(g)), g);
     }
     assert.equal(g.phase, 'finished');
   }
+});
+
+function finishTurn(g) {
+  g = applyAction(g, { type: 'pass' });
+  const meal = foodStatus(g.players[g.active]);
+  return applyAction(g, {
+    type: 'feed',
+    amount: Math.min(meal.need, meal.available),
+  });
+}
+test('food screen pauses on the current player; preview and returning never consume food', () => {
+  let g = invest();
+  const before = structuredClone(g.players);
+  g = applyAction(g, { type: 'pass' });
+  assert.equal(g.phase, 'food');
+  assert.equal(g.active, 0);
+  assert.deepEqual(g.players, before);
+  assert.deepEqual(parseSave(JSON.stringify(g)), g);
+  assert.throws(() =>
+    applyAction(g, { type: 'trade', from: 'money', to: 'food' }),
+  );
+  assert.throws(() => applyAction(g, { type: 'pass' }));
+  g = applyAction(g, { type: 'resume_invest' });
+  assert.equal(g.phase, 'invest');
+  assert.deepEqual(g.players, before);
+});
+test('ration allocation is validated and shortage affects only the finishing player once', () => {
+  let g = invest();
+  g.players[0].population = 4;
+  g.players[0].resources.food = 1;
+  g = applyAction(g, { type: 'pass' });
+  const before = structuredClone(g);
+  for (const amount of [-1, 2, 1.5, NaN, Infinity])
+    assert.throws(() => applyAction(g, { type: 'feed', amount }));
+  assert.deepEqual(g, before);
+  const preview = foodStatus(g.players[0], 1);
+  g = applyAction(g, { type: 'feed', amount: 1 });
+  assert.equal(g.players[0].population, 4 - preview.lost);
+  assert.equal(g.players[0].resources.food, preview.remaining);
+  assert.equal(g.players[1].population, 2);
+  assert.equal(g.active, 1);
+  assert.equal(g.phase, 'invest');
+  assert.throws(() => applyAction(g, { type: 'feed', amount: 0 }));
+});
+test('rotation and cleaning bonuses are previewed, paid once, and never farmed by reopening', () => {
+  let g = invest();
+  const p = g.players[0];
+  p.resources.food = 0;
+  p.techs = ['rotation', 'winnowing'];
+  p.tiles[0] = { kind: 'farm', workers: 1 };
+  p.tiles[1] = { kind: 'farm', workers: 1 };
+  for (let i = 0; i < 3; i++) {
+    g = applyAction(g, { type: 'pass' });
+    assert.equal(foodStatus(g.players[0]).available, 3);
+    g = applyAction(g, { type: 'resume_invest' });
+  }
+  g = finishTurn(g);
+  assert.equal(g.players[0].resources.food, 1);
+});
+test('technology releases are bounded, complete, permanent and enforced by research', () => {
+  assert.deepEqual(
+    new Set(TECHNOLOGY_ROUNDS.flat()),
+    new Set(CARDS.map((c) => c.id)),
+  );
+  assert.equal(TECHNOLOGY_ROUNDS.flat().length, 21);
+  for (const ids of TECHNOLOGY_ROUNDS)
+    assert.ok(ids.length > 0 && ids.length <= 3);
+  let g = invest();
+  const card = CARDS.find((c) => c.id === 'boring');
+  g.players[0].techs = ['newcomen'];
+  assert.throws(() => applyAction(g, { type: 'research', id: card.id }));
+  for (let round = 1; round <= 8; round++) {
+    g.round = round;
+    for (const c of CARDS)
+      assert.equal(availableTechnology(g, c), availableRound(c.id) <= round);
+  }
+  g = applyAction(g, { type: 'research', id: card.id });
+  assert.ok(g.players[0].techs.includes(card.id));
+});
+test('new production and navigation technologies have working bounded effects', () => {
+  let g = createGame(['A', 'B']);
+  const p = g.players[0];
+  p.techs = ['plough', 'shuttle', 'boring', 'newcomen', 'almanac'];
+  assert.equal(
+    previewWork(g, [{ tile: 0 }]).players[0].resources.food,
+    p.resources.food + 4,
+  );
+  assert.equal(
+    previewWork(g, [{ tile: 1 }]).players[0].resources.industry,
+    p.resources.industry + 4,
+  );
+  p.tiles[2] = { kind: 'mine', workers: 0 };
+  assert.equal(
+    previewWork(g, [{ tile: 2 }]).players[0].resources.industry,
+    p.resources.industry + 6,
+  );
+  assert.equal(
+    previewWork(g, [{ job: 'money' }, { job: 'money' }]).players[0].resources
+      .money,
+    p.resources.money + 5,
+  );
+  g = invest();
+  g.round = 5;
+  const trade = g.players[0].trade;
+  g = applyAction(g, { type: 'research', id: 'sextant' });
+  assert.equal(g.players[0].trade, trade + 1);
+});
+
+test('legacy investment saves require food for previously passed players without restoring investments', () => {
+  const g = invest();
+  g.version = 1;
+  g.players[0].passed = true;
+  g.players[0].investments = 1;
+  g.active = 1;
+  const migrated = parseSave(JSON.stringify(g));
+  assert.equal(migrated.version, 2);
+  assert.equal(migrated.players[0].passed, false);
+  assert.equal(migrated.players[0].investments, 0);
+  const fed = finishTurn(migrated);
+  assert.equal(fed.round, 1);
+  assert.equal(fed.active, 0);
+  assert.equal(finishTurn(fed).round, 2);
 });

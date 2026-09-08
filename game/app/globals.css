@@ -1455,3 +1455,104 @@ p {
 .general-jobs .draft-worker {
   margin: 4px;
 }
+
+.market-release {
+  padding: 16px 20px;
+  border: 1px solid #ad945c66;
+  border-radius: 12px;
+  background: #233b30;
+  margin: 18px 0;
+}
+.market-release p {
+  color: #bfccb9;
+  font-size: 13px;
+  margin: 7px 0 0;
+}
+.food-dialog {
+  max-width: 760px;
+}
+.food-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 16px 0;
+}
+.food-summary > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: #263f33;
+  padding: 16px 8px;
+  border-radius: 10px;
+}
+.food-summary b {
+  font-size: 26px;
+  color: #edcf8e;
+}
+.food-summary span {
+  font-size: 12px;
+}
+.ration-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+.ration {
+  display: flex;
+  flex: 1;
+  min-width: 80px;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 1px dashed #c59374;
+  padding: 15px 8px;
+  border-radius: 12px;
+  color: #d29e84;
+}
+.ration span {
+  font-size: 11px;
+}
+.ration.filled {
+  background: #36533a;
+  border: 1px solid #c6c786;
+  color: #e4d799;
+}
+.ration-controls,
+.meal-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ration-controls input {
+  width: 80px;
+}
+.meal-result {
+  padding: 18px;
+  margin: 16px 0;
+  border-radius: 12px;
+  background: #2b4a37;
+  border: 1px solid #83a575;
+}
+.meal-result.shortage {
+  background: #51392e;
+  border-color: #c88a67;
+}
+.meal-result p {
+  margin: 8px 0 0;
+}
+.meal-actions .primary {
+  width: auto;
+  margin: 0;
+  flex: 1;
+}
+.meeple-row {
+  flex-wrap: wrap;
+}
+@media (max-width: 540px) {
+  .food-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
